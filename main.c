@@ -52,9 +52,20 @@
 #include "args.h"
 #include "json.h"
 
+#define MENU_MAIN 0
+#define MENU_SUBMENU 1
+#define KEY_ESC 27
+
+typedef struct {
+    int menu_state;
+    const char* current_content_id;
+    bool continuing;
+} menu_state_t;
+
 int ubuntu_orange = COLOR_RED;
 int text_white = COLOR_WHITE;
 int back_green = COLOR_GREEN;
+int black_green = 3;
 
 noreturn void usage(char *prog)
 {
@@ -72,7 +83,7 @@ typedef enum {
 
 choices_t *read_iso_choices(args_t *args)
 {
-    int capacity = 10;  /* 5 release ISOs * (desktop, server) */
+    int capacity = 50;  /* Allow for more ISO choices */
     choices_t *choices = choices_create(capacity);
     for(int i = 0; i < args->num_infiles; i++) {
         choices_extend_from_json(choices, args->infiles[i], ARCH);
@@ -82,13 +93,14 @@ choices_t *read_iso_choices(args_t *args)
 
 int horizontal_center(int len)
 {
-    return (COLS - len) / 2;
+    // Use 90% of available width
+    return (COLS - (int)(len * 1.5)) / 2;
 }
 
 int vertical_center(int len)
 {
-    /* accounts for 3 line banner */
-    return 3 + (LINES - 3 - len) / 2;
+    /* accounts for 3 line banner, use more vertical space */
+    return 3 + (LINES - 3 - (int)(len * 1.2)) / 2;
 }
 
 void orange_banner(char *label)
@@ -122,7 +134,7 @@ void orange_banner(char *label)
     attroff(COLOR_PAIR(white_orange));
 }
 
-void button(int y, int x, char *label, int textwidth)
+void button(int y, int x, const char *label, int textwidth)
 {
     char *button_text = saprintf("[ %-*s \u25b8 ]", textwidth, label);
     /* Simulate the appearance of buttons in Subiquity.  The unicode character
@@ -130,6 +142,8 @@ void button(int y, int x, char *label, int textwidth)
     mvaddstr(y, x, button_text);
     free(button_text);
 }
+
+#define VIEWPORT_SIZE (LINES - 5)  // Account for banner and borders
 
 void add_chooser(choices_t *choices, int selected)
 {
@@ -140,19 +154,68 @@ void add_chooser(choices_t *choices, int selected)
     for(int i = 0; i < choices->len; i++) {
         longest = MAX(longest, (int)strlen(choices->values[i]->label));
     }
+    
+    // Calculate viewport and scrolling
+    int viewport_start = MAX(0, selected - VIEWPORT_SIZE/2);
+    viewport_start = MIN(viewport_start, choices->len - VIEWPORT_SIZE);
+    if (viewport_start < 0) viewport_start = 0;
+    
+    int viewport_end = MIN(viewport_start + VIEWPORT_SIZE, choices->len);
+    
     /* The + 6 accounts for the button text around the label */
     int center_x = horizontal_center(longest + 6);
-    int center_y = vertical_center(choices->len);
-    for(int i = 0; i < choices->len; i++) {
-        int y = center_y + i;
+    int center_y = vertical_center(MIN(choices->len, VIEWPORT_SIZE));
+    
+    // Show scroll indicators if needed
+    if (viewport_start > 0) {
+        mvaddstr(center_y - 1, center_x + longest/2, "▲");
+    }
+    if (viewport_end < choices->len) {
+        mvaddstr(center_y + MIN(choices->len, VIEWPORT_SIZE), center_x + longest/2, "▼");
+    }
+    
+    // Draw visible items
+    for(int i = viewport_start; i < viewport_end; i++) {
+        int y = center_y + (i - viewport_start);
         if(i == selected) {
-            attron(COLOR_PAIR(white_green));
+            attron(COLOR_PAIR(black_green));
         }
         button(y, center_x, choices->values[i]->label, longest);
         if(i == selected) {
-            attroff(COLOR_PAIR(white_green));
+            attroff(COLOR_PAIR(black_green));
         }
     }
+}
+
+void show_main_menu(choices_t *choices, int selected) {
+    int longest = 0;
+    for(int i = 0; i < content_id_count(); i++) {
+        longest = MAX(longest, (int)strlen(content_id_to_criteria[i].descriptor));
+    }
+    
+    int center_x = horizontal_center(longest + 6);
+    int center_y = vertical_center(content_id_count());
+    
+    for(int i = 0; i < content_id_count(); i++) {
+        if(i == selected) {
+            attron(COLOR_PAIR(black_green));
+        }
+        button(center_y + i, center_x, content_id_to_criteria[i].descriptor, longest);
+        if(i == selected) {
+            attroff(COLOR_PAIR(black_green));
+        }
+    }
+}
+
+choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
+    choices_t* filtered = choices_create(all_choices->len);
+    for(int i = 0; i < all_choices->len; i++) {
+        if(all_choices->values[i]->content_id && 
+           strcmp(all_choices->values[i]->content_id, content_id) == 0) {
+            choices_append(filtered, all_choices->values[i]);
+        }
+    }
+    return filtered;
 }
 
 int color_byte_to_ncurses(uint8_t color_byte)
@@ -268,29 +331,68 @@ int main(int argc, char **argv)
         back_green = 28;
     }
 
-    bool continuing = true;
+    init_pair(black_green, COLOR_BLACK, back_green);
+
+    menu_state_t state = {
+        .menu_state = MENU_MAIN,
+        .current_content_id = NULL,
+        .continuing = true
+    };
+    
+    int main_selected = 0;
     int ch = 0;
 
-    while(continuing) {
+    while(state.continuing) {
+        clear();
         orange_banner("Choose an Ubuntu version to install");
-        add_chooser(iso_info, iso_info->cur);
-        redrawwin(stdscr);
+        
+        if(state.menu_state == MENU_MAIN) {
+            show_main_menu(iso_info, main_selected);
+        } else {
+            choices_t* submenu = get_submenu_choices(iso_info, state.current_content_id);
+            add_chooser(submenu, submenu->cur);
+            choices_free(submenu);
+        }
+        refresh();
+        
         ch = getch();
+        
+        if(ch == KEY_ESC) {
+            if(state.menu_state == MENU_SUBMENU) {
+                state.menu_state = MENU_MAIN;
+                state.current_content_id = NULL;
+            } else {
+                state.continuing = false;
+            }
+            continue;
+        }
+
         switch(ch) {
             case KEY_DOWN:
-                choice_handle_event(args, iso_info, INCREASE);
+                if(state.menu_state == MENU_MAIN) {
+                    if(main_selected < content_id_count() - 1) main_selected++;
+                } else {
+                    choice_handle_event(args, iso_info, INCREASE);
+                }
                 break;
             case KEY_UP:
-                choice_handle_event(args, iso_info, DECREASE);
+                if(state.menu_state == MENU_MAIN) {
+                    if(main_selected > 0) main_selected--;
+                } else {
+                    choice_handle_event(args, iso_info, DECREASE);
+                }
                 break;
             case KEY_ENTER:
             case '\r':
             case '\n':
             case ' ':
-                choice_handle_event(args, iso_info, SELECT);
-                continuing = false;
-                break;
-            default:
+                if(state.menu_state == MENU_MAIN) {
+                    state.current_content_id = content_id_to_criteria[main_selected].content_id;
+                    state.menu_state = MENU_SUBMENU;
+                } else {
+                    choice_handle_event(args, iso_info, SELECT);
+                    state.continuing = false;
+                }
                 break;
         }
     }

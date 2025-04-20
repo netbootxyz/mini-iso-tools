@@ -20,15 +20,8 @@
 #pragma once
 
 #include <stdbool.h>
-
 #include <json-c/json.h>
-
 #include "common.h"
-
-json_object *get(json_object *obj, const char *key);
-const char *str(json_object *obj);
-bool eq(const char *a, const char *b);
-bool lt(const char *a, const char *b);
 
 /* The criteria is a mapping from a content_id to the information we need to
  * retrieve, and show info about, a given ISO. Simple stream JSON contains a
@@ -36,30 +29,26 @@ bool lt(const char *a, const char *b);
  * ISOs we should look for. */
 typedef struct _criteria_t
 {
-    /* simplestream JSON has at the top level a content_id, which allows table
-     * lookup of other necessary info */
     const char *content_id;
-
-    /* os and image_type are both needed to uniquely locate the interesting
-     * products */
     const char *os;
     const char *image_type;
-
-    /* urlbase is the scheme and host information that needs to be
-     * combined with the product path to obtain the full URL */
     const char *urlbase;
-    /* descriptor is friendly description of the product,
-     * such as "Ubuntu Server" */
     const char *descriptor;
 } criteria_t;
 
+/* Expose the content_id_to_criteria array for direct access */
+extern criteria_t content_id_to_criteria[];
+
+/* Function declarations */
+json_object *get(json_object *obj, const char *key);
+const char *str(json_object *obj);
+bool eq(const char *a, const char *b);
+bool lt(const char *a, const char *b);
+int content_id_count(void);
 criteria_t *criteria_for_content_id(const char *content_id);
-
-bool choices_extend_from_json(choices_t *choices, const char *filename,
-                              const char *arch);
+bool choices_extend_from_json(choices_t *choices, const char *filename, const char *arch);
 iso_data_t *get_newest_iso(const char *filename, const char *arch);
-
 json_object *find_largest_key(json_object *obj, const char **ret_key);
 json_object *find_newest_product(json_object *products, const char **ret_key,
-                                 const char *arch, const char *os,
-                                 const char *image_type);
+                                const char *arch, const char *os,
+                                const char *image_type);

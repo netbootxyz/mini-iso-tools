@@ -29,37 +29,65 @@
  * and ISOs below 22.04.2 have kernels that don't have those modules.*/
 #define MINIMUM_UBUNTU_VERSION "22.04.2"
 
-criteria_t content_id_to_criteria[] = {
-    {
-        .content_id = "com.ubuntu.cdimage.daily:ubuntu",
-        .os = "ubuntu",
-        .image_type = "daily-live",
-        .urlbase = "https://cdimage.ubuntu.com",
-        .descriptor = "Ubuntu Desktop",
-    },
-    {
-        .content_id = "com.ubuntu.cdimage.daily:ubuntu-server",
-        .os = "ubuntu-server",
-        .image_type = "daily-live",
-        .urlbase = "https://cdimage.ubuntu.com",
-        .descriptor = "Ubuntu Server",
-    },
-    {
-        .content_id = "com.ubuntu.releases:ubuntu",
-        .os = "ubuntu",
-        .image_type = "desktop",
-        .urlbase = "https://releases.ubuntu.com",
-        .descriptor = "Ubuntu Desktop",
-    },
-    {
-        .content_id = "com.ubuntu.releases:ubuntu-server",
-        .os = "ubuntu-server",
-        .image_type = "live-server",
-        .urlbase = "https://releases.ubuntu.com",
-        .descriptor = "Ubuntu Server",
-    },
-    {} /* must be last */
-};
+ criteria_t content_id_to_criteria[] = {
+     {
+         .content_id = "com.ubuntu.cdimage.daily:ubuntu",
+         .os = "ubuntu",
+         .image_type = "daily-live",
+         .urlbase = "https://cdimage.ubuntu.com",
+         .descriptor = "Ubuntu Desktop",
+     },
+     {
+         .content_id = "com.ubuntu.cdimage.daily:ubuntu-server",
+         .os = "ubuntu-server",
+         .image_type = "daily-live",
+         .urlbase = "https://cdimage.ubuntu.com",
+         .descriptor = "Ubuntu Server",
+     },
+     {
+         .content_id = "com.ubuntu.releases:ubuntu",
+         .os = "ubuntu",
+         .image_type = "desktop",
+         .urlbase = "https://releases.ubuntu.com",
+         .descriptor = "Ubuntu Desktop",
+     },
+     {
+         .content_id = "com.ubuntu.releases:ubuntu-server",
+         .os = "ubuntu-server",
+         .image_type = "live-server",
+         .urlbase = "https://releases.ubuntu.com",
+         .descriptor = "Ubuntu Server",
+     },
+     {
+         .content_id = "org.xubuntu:xubuntu",
+         .os = "xubuntu",
+         .image_type = "desktop",
+         .urlbase = "https://cdimage.ubuntu.com/xubuntu/releases",
+         .descriptor = "Xubuntu Desktop",
+     },
+     {
+         .content_id = "org.ubuntubudgie:ubuntu-budgie",
+         .os = "ubuntu-budgie",
+         .image_type = "desktop",
+         .urlbase = "https://cdimage.ubuntu.com/ubuntu-budgie/releases",
+         .descriptor = "Budgie Desktop",
+     },
+     {
+         .content_id = "me.lubuntu:lubuntu",
+         .os = "lubuntu",
+         .image_type = "desktop",
+         .urlbase = "https://cdimage.ubuntu.com/lubuntu/releases",
+         .descriptor = "Lubuntu Desktop",
+     },
+     {
+         .content_id = "org.kubuntu:kubuntu",
+         .os = "kubuntu",
+         .image_type = "desktop",
+         .urlbase = "https://cdimage.ubuntu.com/kubuntu/releases",
+         .descriptor = "Kubuntu Desktop",
+     },
+     {} /* must be last */
+ };
 
 criteria_t *criteria_for_content_id(const char *content_id)
 {
@@ -70,6 +98,14 @@ criteria_t *criteria_for_content_id(const char *content_id)
         }
     }
     return NULL;
+}
+
+int content_id_count(void) {
+    int count = 0;
+    while(content_id_to_criteria[count].content_id != NULL) {
+        count++;
+    }
+    return count;
 }
 
 json_object *get(json_object *obj, const char *key)
@@ -172,7 +208,8 @@ iso_data_t *iso_data_for_product(json_object *product, criteria_t *criteria)
                      criteria->descriptor, str(title), str(codename)),
             saprintf("%s/%s", criteria->urlbase, str(path)),
             strdup(str(sha256)),
-            json_object_get_int64(size));
+            json_object_get_int64(size),
+            strdup(criteria->content_id));  // Added missing parameter
 }
 
 bool choices_extend_from_json(choices_t *choices, const char *filename,
