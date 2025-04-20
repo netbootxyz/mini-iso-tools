@@ -38,16 +38,15 @@ char *saprintf(char *fmt, ...)
  * a later call to iso_data_free() will release both the iso_data_t and the
  * strings supplied here. */
 iso_data_t *iso_data_create(char *label, char *url, char *sha256sum,
-                            int64_t size)
+                           int64_t size, char *content_id)
 {
-    iso_data_t *ret = calloc(sizeof(iso_data_t), 1);
-    if(!ret) return NULL;
-
-    ret->label = label;
-    ret->url = url;
-    ret->sha256sum = sha256sum;
-    ret->size = size;
-    return ret;
+    iso_data_t *iso_data = malloc(sizeof(iso_data_t));
+    iso_data->label = label;
+    iso_data->url = url;
+    iso_data->sha256sum = sha256sum;
+    iso_data->size = size;
+    iso_data->content_id = content_id;
+    return iso_data;
 }
 
 void iso_data_free(iso_data_t *iso_data)
@@ -55,6 +54,8 @@ void iso_data_free(iso_data_t *iso_data)
     if(!iso_data) return;
     free(iso_data->label);
     free(iso_data->url);
+    free(iso_data->sha256sum);
+    free(iso_data->content_id);
     free(iso_data);
 }
 

@@ -48,13 +48,27 @@
 #include <syslog.h>
 #include <stdnoreturn.h>
 #include <sys/param.h>
+#include <stdarg.h>
 
 #include "args.h"
 #include "json.h"
 
+#define MENU_MAIN 0
+#define MENU_SUBMENU 1
+#define KEY_ESC 27
+
+typedef struct {
+    int menu_state;
+    const char* current_content_id;
+    bool continuing;
+    int main_selected;
+    int submenu_selected;
+} menu_state_t;
+
 int ubuntu_orange = COLOR_RED;
 int text_white = COLOR_WHITE;
 int back_green = COLOR_GREEN;
+int black_green = 3;
 
 noreturn void usage(char *prog)
 {
@@ -72,7 +86,7 @@ typedef enum {
 
 choices_t *read_iso_choices(args_t *args)
 {
-    int capacity = 10;  /* 5 release ISOs * (desktop, server) */
+    int capacity = 50;  /* Allow for more ISO choices */
     choices_t *choices = choices_create(capacity);
     for(int i = 0; i < args->num_infiles; i++) {
         choices_extend_from_json(choices, args->infiles[i], ARCH);
@@ -82,13 +96,14 @@ choices_t *read_iso_choices(args_t *args)
 
 int horizontal_center(int len)
 {
-    return (COLS - len) / 2;
+    // Use 90% of available width
+    return (COLS - (int)(len * 1.5)) / 2;
 }
 
 int vertical_center(int len)
 {
-    /* accounts for 3 line banner */
-    return 3 + (LINES - 3 - len) / 2;
+    /* accounts for 3 line banner, use more vertical space */
+    return 3 + (LINES - 3 - (int)(len * 1.2)) / 2;
 }
 
 void orange_banner(char *label)
@@ -122,7 +137,7 @@ void orange_banner(char *label)
     attroff(COLOR_PAIR(white_orange));
 }
 
-void button(int y, int x, char *label, int textwidth)
+void button(int y, int x, const char *label, int textwidth)
 {
     char *button_text = saprintf("[ %-*s \u25b8 ]", textwidth, label);
     /* Simulate the appearance of buttons in Subiquity.  The unicode character
@@ -130,6 +145,8 @@ void button(int y, int x, char *label, int textwidth)
     mvaddstr(y, x, button_text);
     free(button_text);
 }
+
+#define VIEWPORT_SIZE (LINES - 5)  // Account for banner and borders
 
 void add_chooser(choices_t *choices, int selected)
 {
@@ -140,19 +157,118 @@ void add_chooser(choices_t *choices, int selected)
     for(int i = 0; i < choices->len; i++) {
         longest = MAX(longest, (int)strlen(choices->values[i]->label));
     }
+    
+    // Calculate viewport and scrolling
+    int viewport_start = MAX(0, selected - VIEWPORT_SIZE/2);
+    viewport_start = MIN(viewport_start, choices->len - VIEWPORT_SIZE);
+    if (viewport_start < 0) viewport_start = 0;
+    
+    int viewport_end = MIN(viewport_start + VIEWPORT_SIZE, choices->len);
+    
     /* The + 6 accounts for the button text around the label */
     int center_x = horizontal_center(longest + 6);
-    int center_y = vertical_center(choices->len);
-    for(int i = 0; i < choices->len; i++) {
-        int y = center_y + i;
+    int center_y = vertical_center(MIN(choices->len, VIEWPORT_SIZE));
+    
+    // Show scroll indicators if needed
+    if (viewport_start > 0) {
+        mvaddstr(center_y - 1, center_x + longest/2, "▲");
+    }
+    if (viewport_end < choices->len) {
+        mvaddstr(center_y + MIN(choices->len, VIEWPORT_SIZE), center_x + longest/2, "▼");
+    }
+    
+    // Draw visible items
+    for(int i = viewport_start; i < viewport_end; i++) {
+        int y = center_y + (i - viewport_start);
         if(i == selected) {
-            attron(COLOR_PAIR(white_green));
+            attron(COLOR_PAIR(black_green));
         }
         button(y, center_x, choices->values[i]->label, longest);
         if(i == selected) {
-            attroff(COLOR_PAIR(white_green));
+            attroff(COLOR_PAIR(black_green));
         }
     }
+}
+
+void show_main_menu(choices_t *choices, int selected) {
+    int longest = 0;
+    for(int i = 0; i < content_id_count(); i++) {
+        longest = MAX(longest, (int)strlen(content_id_to_criteria[i].descriptor));
+    }
+    
+    int center_x = horizontal_center(longest + 6);
+    int center_y = vertical_center(content_id_count());
+    
+    for(int i = 0; i < content_id_count(); i++) {
+        if(i == selected) {
+            attron(COLOR_PAIR(black_green));
+        }
+        button(center_y + i, center_x, content_id_to_criteria[i].descriptor, longest);
+        if(i == selected) {
+            attroff(COLOR_PAIR(black_green));
+        }
+    }
+}
+
+choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
+    if (!all_choices || !content_id) {
+        return NULL;
+    }
+
+    choices_t* filtered = choices_create(50);
+    if (!filtered) {
+        return NULL;
+    }
+    
+    int matches = 0;
+    for(int i = 0; i < all_choices->len; i++) {
+        if(!all_choices->values[i] || !all_choices->values[i]->content_id) {
+            continue;
+        }
+        
+        if(strcmp(all_choices->values[i]->content_id, content_id) == 0) {
+            iso_data_t* copy = malloc(sizeof(iso_data_t));
+            if (!copy) {
+                choices_free(filtered);
+                return NULL;
+            }
+            
+            // Copy strings safely
+            copy->label = strdup(all_choices->values[i]->label);
+            copy->url = strdup(all_choices->values[i]->url);
+            copy->content_id = strdup(all_choices->values[i]->content_id);
+            copy->sha256sum = strdup(all_choices->values[i]->sha256sum);
+            copy->size = all_choices->values[i]->size;
+            
+            if (!copy->label || !copy->url || !copy->content_id || !copy->sha256sum) {
+                free(copy->label);
+                free(copy->url);
+                free(copy->content_id);
+                free(copy->sha256sum);
+                free(copy);
+                choices_free(filtered);
+                return NULL;
+            }
+            
+            if (!choices_append(filtered, copy)) {
+                free(copy->label);
+                free(copy->url);
+                free(copy->content_id);
+                free(copy->sha256sum);
+                free(copy);
+                choices_free(filtered);
+                return NULL;
+            }
+            matches++;
+        }
+    }
+    
+    if (matches == 0) {
+        choices_free(filtered);
+        return NULL;
+    }
+    
+    return filtered;
 }
 
 int color_byte_to_ncurses(uint8_t color_byte)
@@ -190,17 +306,23 @@ void choice_handle_event(args_t *args, choices_t *choices, choice_event evt)
         case DECREASE:
             if(choices->cur > 0) {
                 choices->cur--;
+                clear();
+                orange_banner("netboot.xyz - Choose an Ubuntu version to install");
+                add_chooser(choices, choices->cur);
+                refresh();
             }
             break;
         case SELECT:
             iso_data_t *cur = choices->values[choices->cur];
             write_output(args->outfile, cur);
-            syslog(LOG_DEBUG, "selected:%s %s %" PRId64,
-                   cur->label, cur->url, cur->size);
             break;
         case INCREASE:
             if(choices->cur < choices->len - 1) {
                 choices->cur++;
+                clear();
+                orange_banner("netboot.xyz - Choose an Ubuntu version to install");
+                add_chooser(choices, choices->cur);
+                refresh();
             }
             break;
         default:
@@ -214,6 +336,18 @@ void exit_cb(void)
     erase();
     refresh();
     endwin();
+}
+
+void reset_submenu_state(menu_state_t *state, choices_t **submenu) {
+    if (*submenu != NULL) {
+        choices_free(*submenu);
+        *submenu = NULL;
+    }
+    state->menu_state = MENU_MAIN;
+    state->current_content_id = NULL;
+    state->submenu_selected = 0;
+    clear();
+    refresh();
 }
 
 int main(int argc, char **argv)
@@ -268,31 +402,102 @@ int main(int argc, char **argv)
         back_green = 28;
     }
 
-    bool continuing = true;
-    int ch = 0;
+    init_pair(black_green, COLOR_BLACK, back_green);
 
-    while(continuing) {
-        orange_banner("Choose an Ubuntu version to install");
-        add_chooser(iso_info, iso_info->cur);
-        redrawwin(stdscr);
-        ch = getch();
+    menu_state_t state = {
+        .menu_state = MENU_MAIN,
+        .current_content_id = NULL,
+        .continuing = true,
+        .main_selected = 0,
+        .submenu_selected = 0
+    };
+    
+    choices_t* submenu = NULL;
+
+    while(state.continuing) {
+        clear();
+        orange_banner("netboot.xyz - Choose an Ubuntu version to install");
+
+        if(state.menu_state == MENU_MAIN) {
+            show_main_menu(iso_info, state.main_selected);
+        } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
+            add_chooser(submenu, state.submenu_selected);
+        }
+
+        int ch = getch();
+
         switch(ch) {
+            case 27:  // ESC key
+            case 'q':
+            case 'Q':
+                if(state.menu_state == MENU_SUBMENU) {
+                    reset_submenu_state(&state, &submenu);
+                } else {
+                    state.continuing = false;
+                }
+                break;
+
             case KEY_DOWN:
-                choice_handle_event(args, iso_info, INCREASE);
+            case 'j':
+                if(state.menu_state == MENU_MAIN) {
+                    if(state.main_selected < content_id_count() - 1) 
+                        state.main_selected++;
+                } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
+                    if(state.submenu_selected < submenu->len - 1) {
+                        state.submenu_selected++;
+                        submenu->cur = state.submenu_selected;
+                    }
+                }
                 break;
+
             case KEY_UP:
-                choice_handle_event(args, iso_info, DECREASE);
+            case 'k':
+                if(state.menu_state == MENU_MAIN) {
+                    if(state.main_selected > 0) 
+                        state.main_selected--;
+                } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
+                    if(state.submenu_selected > 0) {
+                        state.submenu_selected--;
+                        submenu->cur = state.submenu_selected;
+                    }
+                }
                 break;
+
             case KEY_ENTER:
+            case KEY_RIGHT:
             case '\r':
             case '\n':
             case ' ':
-                choice_handle_event(args, iso_info, SELECT);
-                continuing = false;
-                break;
-            default:
+                if(state.menu_state == MENU_MAIN) {
+                    const char* selected_content_id = content_id_to_criteria[state.main_selected].content_id;
+                    
+                    choices_t* new_submenu = get_submenu_choices(iso_info, selected_content_id);
+                    
+                    if (new_submenu && new_submenu->len > 0) {
+                        if (submenu != NULL) {
+                            choices_free(submenu);
+                        }
+                        submenu = new_submenu;
+                        state.menu_state = MENU_SUBMENU;
+                        state.current_content_id = selected_content_id;
+                        state.submenu_selected = 0;
+                        submenu->cur = 0;
+                    } else {
+                        if (new_submenu) {
+                            choices_free(new_submenu);
+                        }
+                    }
+                } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
+                    choice_handle_event(args, submenu, SELECT);
+                    state.continuing = false;
+                }
                 break;
         }
+        refresh();
+    }
+
+    if (submenu != NULL) {
+        choices_free(submenu);
     }
 
     choices_free(iso_info);

@@ -32,6 +32,7 @@ typedef struct _iso_data
     char *url;
     char *sha256sum;
     int64_t size;
+    char *content_id;  // Added content_id field
 } iso_data_t;
 
 typedef struct _choices
@@ -43,7 +44,7 @@ typedef struct _choices
 } choices_t;
 
 iso_data_t *iso_data_create(char *label, char *url, char *sha256sum,
-                            int64_t size);
+                            int64_t size, char *content_id);
 void iso_data_free(iso_data_t *iso_data);
 
 choices_t *choices_create(int len);

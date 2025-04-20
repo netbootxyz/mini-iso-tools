@@ -29,27 +29,48 @@
  * and ISOs below 22.04.2 have kernels that don't have those modules.*/
 #define MINIMUM_UBUNTU_VERSION "22.04.2"
 
-criteria_t content_id_to_criteria[] = {
+ criteria_t content_id_to_criteria[] = {
     {
-        .content_id = "com.ubuntu.cdimage.daily:ubuntu",
-        .os = "ubuntu",
-        .image_type = "daily-live",
-        .urlbase = "https://cdimage.ubuntu.com",
-        .descriptor = "Ubuntu Desktop",
-    },
-    {
-        .content_id = "com.ubuntu.cdimage.daily:ubuntu-server",
-        .os = "ubuntu-server",
-        .image_type = "daily-live",
-        .urlbase = "https://cdimage.ubuntu.com",
-        .descriptor = "Ubuntu Server",
-    },
-    {
+        .content_id = "org.ubuntubudgie:ubuntu-budgie",
+        .os = "ubuntu-budgie",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/ubuntu-budgie/releases",
+        .descriptor = "Budgie Desktop",
+     }, 
+     {
+        .content_id = "org.edubuntu:edubuntu",
+        .os = "edubuntu",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/edubuntu/releases",
+        .descriptor = "Edubuntu",
+     },
+     {
+        .content_id = "org.kubuntu:kubuntu",
+        .os = "kubuntu",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/kubuntu/releases",
+        .descriptor = "Kubuntu Desktop",
+     },
+     {
+         .content_id = "me.lubuntu:lubuntu",
+         .os = "lubuntu",
+         .image_type = "desktop",
+         .urlbase = "https://cdimage.ubuntu.com/lubuntu/releases",
+         .descriptor = "Lubuntu Desktop",
+     },
+     {
         .content_id = "com.ubuntu.releases:ubuntu",
         .os = "ubuntu",
         .image_type = "desktop",
         .urlbase = "https://releases.ubuntu.com",
         .descriptor = "Ubuntu Desktop",
+     },
+     {
+        .content_id = "org.ubuntu-mate:ubuntu-mate",
+        .os = "ubuntu-mate",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/ubuntu-mate/releases",
+        .descriptor = "Ubuntu MATE",
     },
     {
         .content_id = "com.ubuntu.releases:ubuntu-server",
@@ -58,8 +79,15 @@ criteria_t content_id_to_criteria[] = {
         .urlbase = "https://releases.ubuntu.com",
         .descriptor = "Ubuntu Server",
     },
+    {
+        .content_id = "org.xubuntu:xubuntu",
+        .os = "xubuntu",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/xubuntu/releases",
+        .descriptor = "Xubuntu Desktop",
+    },
     {} /* must be last */
-};
+ };
 
 criteria_t *criteria_for_content_id(const char *content_id)
 {
@@ -70,6 +98,14 @@ criteria_t *criteria_for_content_id(const char *content_id)
         }
     }
     return NULL;
+}
+
+int content_id_count(void) {
+    int count = 0;
+    while(content_id_to_criteria[count].content_id != NULL) {
+        count++;
+    }
+    return count;
 }
 
 json_object *get(json_object *obj, const char *key)
@@ -172,14 +208,13 @@ iso_data_t *iso_data_for_product(json_object *product, criteria_t *criteria)
                      criteria->descriptor, str(title), str(codename)),
             saprintf("%s/%s", criteria->urlbase, str(path)),
             strdup(str(sha256)),
-            json_object_get_int64(size));
+            json_object_get_int64(size),
+            strdup(criteria->content_id));  // Added missing content_id parameter
 }
 
 bool choices_extend_from_json(choices_t *choices, const char *filename,
                               const char *arch)
 {
-    /* extend the choices available to include all viable isos
-     * found in this file */
     json_object *root = json_object_from_file(filename);
     if(!root) return false;
 
@@ -193,20 +228,33 @@ bool choices_extend_from_json(choices_t *choices, const char *filename,
     json_object_object_foreach(products, product_key, product) {
         (void)product_key;
 
+        // Check basic product criteria first
         if(!eq(str(get(product, "arch")), arch)) continue;
         if(!eq(str(get(product, "os")), criteria->os)) continue;
-        if(!eq(str(get(product, "image_type")), criteria->image_type))
-            continue;
-        if(lt(str(get(product, "release_title")), MINIMUM_UBUNTU_VERSION))
-            continue;
+        if(!eq(str(get(product, "image_type")), criteria->image_type)) continue;
+        if(lt(str(get(product, "release_title")), MINIMUM_UBUNTU_VERSION)) continue;
+
+        // Get all versions for this product
         json_object *versions = get(product, "versions");
         if(!versions) continue;
-        json_object *newest = find_largest_key(versions, NULL);
-        if(!newest) continue;
 
-        if(!choices_append(choices, iso_data_for_product(product, criteria)))
-            return false;
+        // Add an entry for each version that has an ISO
+        json_object_object_foreach(versions, version_key, version) {
+            (void)version_key;
+            json_object *items = get(version, "items");
+            if(!items) continue;
 
+            json_object *iso = get(items, "iso");
+            if(!iso) continue;
+
+            iso_data_t *data = iso_data_for_product(product, criteria);
+            if(data) {
+                if(!choices_append(choices, data)) {
+                    json_object_put(root);
+                    return false;
+                }
+            }
+        }
     }
 
     json_object_put(root);

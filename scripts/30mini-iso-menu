@@ -41,10 +41,14 @@ iso_chooser_step1() {
 
     dev=$(blkid --match-token LABEL=ISOIMAGE | cut -d: -f1)
 
-    modprobe isofs
-    mount -o ro "$dev" "${mountpoint}"
+    #modprobe isofs
+    #mount -o ro "$dev" "${mountpoint}"
 
     configure_networking
+
+    modprobe isofs
+    wget https://cdimage.ubuntu.com/ubuntu-mini-iso/daily-live/current/plucky-mini-iso-amd64.iso -O /tmp/mini-iso.iso
+    mount -o ro /tmp/mini-iso.iso "${mountpoint}"
 
     echo "Loading $MEDIA_LABEL ..."
 
@@ -85,8 +89,20 @@ iso_chooser_step2() {
         /bin/sh
     fi
 
-    echo "Downloading $URL ..."
-    wget "$URL" -O "$target"
+    echo "Downloading $URL using ${DOWNLOAD_MODE:-direct} method..."
+    case "${DOWNLOAD_MODE:-direct}" in
+        torrent)
+            TORRENT_URL="${URL%.*}.torrent"
+            echo "Using torrent: $TORRENT_URL"
+            wget "$TORRENT_URL" -O /tmp/ubuntu.torrent
+            transmission-cli -w /tmp -f -D /tmp/ubuntu.torrent
+            dd if=/tmp/*.iso of="$target" bs=1M
+            rm -f /tmp/*.iso /tmp/ubuntu.torrent
+            ;;
+        direct|*)
+            wget "$URL" -O "$target"
+            ;;
+    esac
 
     if [ -n "$MEDIA_256SUM" -a "$VALIDATE_CHECKSUM" = "1" ]; then
         echo "Checksum verification ..."
@@ -128,6 +144,7 @@ for x in $(cat /proc/cmdline); do
         iso-256sum=*)   export MEDIA_256SUM="${x#iso-256sum=}";;
         fsck.mode=skip) export VALIDATE_CHECKSUM=0;;
         memmap=*)       export MEMMAP="$x";;
+        download-mode=*) export DOWNLOAD_MODE="${x#download-mode=}";;
         *);;
     esac
 done
