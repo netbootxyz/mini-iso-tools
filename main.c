@@ -208,11 +208,22 @@ void show_main_menu(choices_t *choices, int selected) {
 }
 
 choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
-    choices_t* filtered = choices_create(all_choices->len);
+    choices_t* filtered = choices_create(50); // Allow for more choices
     for(int i = 0; i < all_choices->len; i++) {
         if(all_choices->values[i]->content_id && 
            strcmp(all_choices->values[i]->content_id, content_id) == 0) {
             choices_append(filtered, all_choices->values[i]);
+        }
+    }
+    
+    // Sort filtered choices by label (which contains version info)
+    for(int i = 0; i < filtered->len; i++) {
+        for(int j = i + 1; j < filtered->len; j++) {
+            if(strcmp(filtered->values[i]->label, filtered->values[j]->label) < 0) {
+                iso_data_t* temp = filtered->values[i];
+                filtered->values[i] = filtered->values[j];
+                filtered->values[j] = temp;
+            }
         }
     }
     return filtered;
@@ -253,6 +264,10 @@ void choice_handle_event(args_t *args, choices_t *choices, choice_event evt)
         case DECREASE:
             if(choices->cur > 0) {
                 choices->cur--;
+                clear();
+                orange_banner("Choose an Ubuntu version to install");
+                add_chooser(choices, choices->cur);
+                refresh();
             }
             break;
         case SELECT:
@@ -264,6 +279,10 @@ void choice_handle_event(args_t *args, choices_t *choices, choice_event evt)
         case INCREASE:
             if(choices->cur < choices->len - 1) {
                 choices->cur++;
+                clear();
+                orange_banner("Choose an Ubuntu version to install");
+                add_chooser(choices, choices->cur);
+                refresh();
             }
             break;
         default:
@@ -343,61 +362,88 @@ int main(int argc, char **argv)
     int ch = 0;
 
     while(state.continuing) {
+        clear();
+        orange_banner("Choose an Ubuntu version to install");
+
         if(state.menu_state == MENU_MAIN) {
-            clear();
-            orange_banner("Choose an Ubuntu version to install");
             show_main_menu(iso_info, main_selected);
             refresh();
-        } else {
-            clear();
-            orange_banner("Choose an Ubuntu version to install");
-            choices_t* submenu = get_submenu_choices(iso_info, state.current_content_id);
-            add_chooser(submenu, submenu->cur);
-            choices_free(submenu);
-            refresh();
-        }
-        
-        ch = getch();
-        
-        if(ch == KEY_ESC) {
-            if(state.menu_state == MENU_SUBMENU) {
-                state.menu_state = MENU_MAIN;
-                state.current_content_id = NULL;
-                continue;
-            } else {
+            
+            ch = getch();
+            if(ch == KEY_ESC) {
                 state.continuing = false;
+                continue;
             }
-            continue;
-        }
 
-        switch(ch) {
-            case KEY_DOWN:
-                if(state.menu_state == MENU_MAIN) {
+            switch(ch) {
+                case KEY_DOWN:
                     if(main_selected < content_id_count() - 1) main_selected++;
-                } else {
-                    choice_handle_event(args, iso_info, INCREASE);
-                }
-                break;
-            case KEY_UP:
-                if(state.menu_state == MENU_MAIN) {
+                    break;
+                case KEY_UP:
                     if(main_selected > 0) main_selected--;
-                } else {
-                    choice_handle_event(args, iso_info, DECREASE);
-                }
-                break;
-            case KEY_ENTER:
-            case '\r':
-            case '\n':
-            case ' ':
-                if(state.menu_state == MENU_MAIN) {
+                    break;
+                case KEY_ENTER:
+                case '\r':
+                case '\n':
+                case ' ':
                     state.current_content_id = content_id_to_criteria[main_selected].content_id;
                     state.menu_state = MENU_SUBMENU;
-                    iso_info->cur = 0; // Reset submenu position when entering
-                } else {
-                    choice_handle_event(args, iso_info, SELECT);
+                    iso_info->cur = 0;
+                    continue;  // Immediately redraw as submenu
+            }
+        } else {
+            choices_t* submenu = get_submenu_choices(iso_info, state.current_content_id);
+            static int submenu_selected = 0;
+            
+            // Check for empty submenu
+            if (submenu->len == 0) {
+                state.menu_state = MENU_MAIN;
+                state.current_content_id = NULL;
+                submenu_selected = 0;
+                choices_free(submenu);
+                continue;
+            }
+
+            // Ensure selection is within bounds
+            if (submenu_selected >= submenu->len) {
+                submenu_selected = 0;
+            }
+            
+            submenu->cur = submenu_selected;
+            add_chooser(submenu, submenu_selected);
+            refresh();
+            
+            ch = getch();
+            if(ch == KEY_ESC) {
+                state.menu_state = MENU_MAIN;
+                state.current_content_id = NULL;
+                submenu_selected = 0;
+                choices_free(submenu);
+                continue;
+            }
+
+            switch(ch) {
+                case KEY_DOWN:
+                    if(submenu_selected < submenu->len - 1) {
+                        submenu_selected++;
+                        submenu->cur = submenu_selected;
+                    }
+                    break;
+                case KEY_UP:
+                    if(submenu_selected > 0) {
+                        submenu_selected--;
+                        submenu->cur = submenu_selected;
+                    }
+                    break;
+                case KEY_ENTER:
+                case '\r':
+                case '\n':
+                case ' ':
+                    choice_handle_event(args, submenu, SELECT);
                     state.continuing = false;
-                }
-                break;
+                    break;
+            }
+            choices_free(submenu);
         }
     }
 

@@ -86,7 +86,21 @@
          .urlbase = "https://cdimage.ubuntu.com/kubuntu/releases",
          .descriptor = "Kubuntu Desktop",
      },
-     {} /* must be last */
+     {
+        .content_id = "org.ubuntu-mate:ubuntu-mate",
+        .os = "ubuntu-mate",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/ubuntu-mate/releases",
+        .descriptor = "Ubuntu MATE",
+    },
+    {
+        .content_id = "org.ubuntu-mate:ubuntu-mate",
+        .os = "edubuntu",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/edubuntu/releases",
+        .descriptor = "Edubuntu",
+    },
+    {} /* must be last */
  };
 
 criteria_t *criteria_for_content_id(const char *content_id)
@@ -215,8 +229,6 @@ iso_data_t *iso_data_for_product(json_object *product, criteria_t *criteria)
 bool choices_extend_from_json(choices_t *choices, const char *filename,
                               const char *arch)
 {
-    /* extend the choices available to include all viable isos
-     * found in this file */
     json_object *root = json_object_from_file(filename);
     if(!root) return false;
 
@@ -230,20 +242,33 @@ bool choices_extend_from_json(choices_t *choices, const char *filename,
     json_object_object_foreach(products, product_key, product) {
         (void)product_key;
 
+        // Check basic product criteria first
         if(!eq(str(get(product, "arch")), arch)) continue;
         if(!eq(str(get(product, "os")), criteria->os)) continue;
-        if(!eq(str(get(product, "image_type")), criteria->image_type))
-            continue;
-        if(lt(str(get(product, "release_title")), MINIMUM_UBUNTU_VERSION))
-            continue;
+        if(!eq(str(get(product, "image_type")), criteria->image_type)) continue;
+        if(lt(str(get(product, "release_title")), MINIMUM_UBUNTU_VERSION)) continue;
+
+        // Get all versions for this product
         json_object *versions = get(product, "versions");
         if(!versions) continue;
-        json_object *newest = find_largest_key(versions, NULL);
-        if(!newest) continue;
 
-        if(!choices_append(choices, iso_data_for_product(product, criteria)))
-            return false;
+        // Add an entry for each version that has an ISO
+        json_object_object_foreach(versions, version_key, version) {
+            (void)version_key;
+            json_object *items = get(version, "items");
+            if(!items) continue;
 
+            json_object *iso = get(items, "iso");
+            if(!iso) continue;
+
+            iso_data_t *data = iso_data_for_product(product, criteria);
+            if(data) {
+                if(!choices_append(choices, data)) {
+                    json_object_put(root);
+                    return false;
+                }
+            }
+        }
     }
 
     json_object_put(root);
