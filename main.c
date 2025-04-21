@@ -343,17 +343,19 @@ int main(int argc, char **argv)
     int ch = 0;
 
     while(state.continuing) {
-        clear();
-        orange_banner("Choose an Ubuntu version to install");
-        
         if(state.menu_state == MENU_MAIN) {
+            clear();
+            orange_banner("Choose an Ubuntu version to install");
             show_main_menu(iso_info, main_selected);
+            refresh();
         } else {
+            clear();
+            orange_banner("Choose an Ubuntu version to install");
             choices_t* submenu = get_submenu_choices(iso_info, state.current_content_id);
             add_chooser(submenu, submenu->cur);
             choices_free(submenu);
+            refresh();
         }
-        refresh();
         
         ch = getch();
         
@@ -361,6 +363,7 @@ int main(int argc, char **argv)
             if(state.menu_state == MENU_SUBMENU) {
                 state.menu_state = MENU_MAIN;
                 state.current_content_id = NULL;
+                continue;
             } else {
                 state.continuing = false;
             }
@@ -389,6 +392,7 @@ int main(int argc, char **argv)
                 if(state.menu_state == MENU_MAIN) {
                     state.current_content_id = content_id_to_criteria[main_selected].content_id;
                     state.menu_state = MENU_SUBMENU;
+                    iso_info->cur = 0; // Reset submenu position when entering
                 } else {
                     choice_handle_event(args, iso_info, SELECT);
                     state.continuing = false;

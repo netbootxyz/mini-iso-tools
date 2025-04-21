@@ -209,7 +209,7 @@ iso_data_t *iso_data_for_product(json_object *product, criteria_t *criteria)
             saprintf("%s/%s", criteria->urlbase, str(path)),
             strdup(str(sha256)),
             json_object_get_int64(size),
-            strdup(criteria->content_id));  // Added missing parameter
+            strdup(criteria->content_id));  // Added missing content_id parameter
 }
 
 bool choices_extend_from_json(choices_t *choices, const char *filename,
