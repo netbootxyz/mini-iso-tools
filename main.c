@@ -72,7 +72,7 @@ typedef enum {
 
 choices_t *read_iso_choices(args_t *args)
 {
-    int capacity = 10;  /* 5 release ISOs * (desktop, server) */
+    int capacity = 50;  /* 5 release ISOs * (desktop, server) */
     choices_t *choices = choices_create(capacity);
     for(int i = 0; i < args->num_infiles; i++) {
         choices_extend_from_json(choices, args->infiles[i], ARCH);
