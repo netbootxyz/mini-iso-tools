@@ -300,6 +300,18 @@ void exit_cb(void)
     endwin();
 }
 
+void reset_menu_state(menu_state_t *state, choices_t **submenu) {
+    state->menu_state = MENU_MAIN;
+    state->current_content_id = NULL;
+    state->submenu_selected = 0;
+    if (*submenu != NULL) {
+        choices_free(*submenu);
+        *submenu = NULL;
+    }
+    clear();
+    refresh();
+}
+
 int main(int argc, char **argv)
 {
     args_t *args = args_create(argc, argv);
@@ -363,12 +375,17 @@ int main(int argc, char **argv)
     };
     
     int ch = 0;
+    choices_t* submenu = NULL;
 
     while(state.continuing) {
         clear();
         orange_banner("Choose an Ubuntu version to install");
 
         if(state.menu_state == MENU_MAIN) {
+            if (submenu != NULL) {
+                choices_free(submenu);
+                submenu = NULL;
+            }
             show_main_menu(iso_info, state.main_selected);
             refresh();
             
@@ -389,35 +406,24 @@ int main(int argc, char **argv)
                 case '\r':
                 case '\n':
                 case ' ':
-                    state.current_content_id = content_id_to_criteria[state.main_selected].content_id;
-                    state.menu_state = MENU_SUBMENU;
-                    continue;
+                    reset_menu_state(&state, &submenu);  // Reset before creating new submenu
+                    submenu = get_submenu_choices(iso_info, content_id_to_criteria[state.main_selected].content_id);
+                    if (submenu != NULL && submenu->len > 0) {
+                        state.menu_state = MENU_SUBMENU;
+                        state.current_content_id = content_id_to_criteria[state.main_selected].content_id;
+                    }
+                    break;
             }
-        } else {
-            choices_t* submenu = get_submenu_choices(iso_info, state.current_content_id);
-            
-            if (submenu->len == 0) {
-                state.menu_state = MENU_MAIN;
-                state.current_content_id = NULL;
-                state.submenu_selected = 0;
-                choices_free(submenu);
-                continue;
-            }
-
-            if (state.submenu_selected >= submenu->len) {
-                state.submenu_selected = submenu->len - 1;
-            }
-            
+        } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
             submenu->cur = state.submenu_selected;
             add_chooser(submenu, state.submenu_selected);
             refresh();
             
             ch = getch();
             if(ch == KEY_ESC) {
-                state.menu_state = MENU_MAIN;
-                state.current_content_id = NULL;
-                state.submenu_selected = 0;
-                choices_free(submenu);
+                reset_menu_state(&state, &submenu);
+                show_main_menu(iso_info, state.main_selected);
+                refresh();
                 continue;
             }
 
@@ -442,8 +448,11 @@ int main(int argc, char **argv)
                     state.continuing = false;
                     break;
             }
-            choices_free(submenu);
         }
+    }
+
+    if (submenu != NULL) {
+        choices_free(submenu);
     }
 
     choices_free(iso_info);

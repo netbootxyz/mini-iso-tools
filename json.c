@@ -31,20 +31,6 @@
 
  criteria_t content_id_to_criteria[] = {
      {
-         .content_id = "com.ubuntu.cdimage.daily:ubuntu",
-         .os = "ubuntu",
-         .image_type = "daily-live",
-         .urlbase = "https://cdimage.ubuntu.com",
-         .descriptor = "Ubuntu Desktop",
-     },
-     {
-         .content_id = "com.ubuntu.cdimage.daily:ubuntu-server",
-         .os = "ubuntu-server",
-         .image_type = "daily-live",
-         .urlbase = "https://cdimage.ubuntu.com",
-         .descriptor = "Ubuntu Server",
-     },
-     {
          .content_id = "com.ubuntu.releases:ubuntu",
          .os = "ubuntu",
          .image_type = "desktop",
