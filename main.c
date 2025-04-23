@@ -60,6 +60,8 @@ typedef struct {
     int menu_state;
     const char* current_content_id;
     bool continuing;
+    int main_selected;
+    int submenu_selected;
 } menu_state_t;
 
 int ubuntu_orange = COLOR_RED;
@@ -355,10 +357,11 @@ int main(int argc, char **argv)
     menu_state_t state = {
         .menu_state = MENU_MAIN,
         .current_content_id = NULL,
-        .continuing = true
+        .continuing = true,
+        .main_selected = 0,
+        .submenu_selected = 0
     };
     
-    int main_selected = 0;
     int ch = 0;
 
     while(state.continuing) {
@@ -366,7 +369,7 @@ int main(int argc, char **argv)
         orange_banner("Choose an Ubuntu version to install");
 
         if(state.menu_state == MENU_MAIN) {
-            show_main_menu(iso_info, main_selected);
+            show_main_menu(iso_info, state.main_selected);
             refresh();
             
             ch = getch();
@@ -377,62 +380,58 @@ int main(int argc, char **argv)
 
             switch(ch) {
                 case KEY_DOWN:
-                    if(main_selected < content_id_count() - 1) main_selected++;
+                    if(state.main_selected < content_id_count() - 1) state.main_selected++;
                     break;
                 case KEY_UP:
-                    if(main_selected > 0) main_selected--;
+                    if(state.main_selected > 0) state.main_selected--;
                     break;
                 case KEY_ENTER:
                 case '\r':
                 case '\n':
                 case ' ':
-                    state.current_content_id = content_id_to_criteria[main_selected].content_id;
+                    state.current_content_id = content_id_to_criteria[state.main_selected].content_id;
                     state.menu_state = MENU_SUBMENU;
-                    iso_info->cur = 0;
-                    continue;  // Immediately redraw as submenu
+                    continue;
             }
         } else {
             choices_t* submenu = get_submenu_choices(iso_info, state.current_content_id);
-            static int submenu_selected = 0;
             
-            // Check for empty submenu
             if (submenu->len == 0) {
                 state.menu_state = MENU_MAIN;
                 state.current_content_id = NULL;
-                submenu_selected = 0;
+                state.submenu_selected = 0;
                 choices_free(submenu);
                 continue;
             }
 
-            // Ensure selection is within bounds
-            if (submenu_selected >= submenu->len) {
-                submenu_selected = 0;
+            if (state.submenu_selected >= submenu->len) {
+                state.submenu_selected = submenu->len - 1;
             }
             
-            submenu->cur = submenu_selected;
-            add_chooser(submenu, submenu_selected);
+            submenu->cur = state.submenu_selected;
+            add_chooser(submenu, state.submenu_selected);
             refresh();
             
             ch = getch();
             if(ch == KEY_ESC) {
                 state.menu_state = MENU_MAIN;
                 state.current_content_id = NULL;
-                submenu_selected = 0;
+                state.submenu_selected = 0;
                 choices_free(submenu);
                 continue;
             }
 
             switch(ch) {
                 case KEY_DOWN:
-                    if(submenu_selected < submenu->len - 1) {
-                        submenu_selected++;
-                        submenu->cur = submenu_selected;
+                    if(state.submenu_selected < submenu->len - 1) {
+                        state.submenu_selected++;
+                        submenu->cur = state.submenu_selected;
                     }
                     break;
                 case KEY_UP:
-                    if(submenu_selected > 0) {
-                        submenu_selected--;
-                        submenu->cur = submenu_selected;
+                    if(state.submenu_selected > 0) {
+                        state.submenu_selected--;
+                        submenu->cur = state.submenu_selected;
                     }
                     break;
                 case KEY_ENTER:
