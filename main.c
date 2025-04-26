@@ -404,14 +404,11 @@ int main(int argc, char **argv)
                 case '\r':
                 case '\n':
                 case ' ':
-                    if (submenu != NULL) {
-                        choices_free(submenu);  // Free previous submenu if it exists
-                        submenu = NULL;
-                    }
                     submenu = get_submenu_choices(iso_info, content_id_to_criteria[state.main_selected].content_id);
                     if (submenu != NULL && submenu->len > 0) {
                         state.menu_state = MENU_SUBMENU;
                         state.current_content_id = content_id_to_criteria[state.main_selected].content_id;
+                        state.submenu_selected = 0;  // Reset submenu selection when entering
                     }
                     break;
             }
