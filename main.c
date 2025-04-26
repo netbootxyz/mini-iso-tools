@@ -300,14 +300,12 @@ void exit_cb(void)
     endwin();
 }
 
+// In the reset_menu_state function, modify to only reset menu state without clearing submenu
 void reset_menu_state(menu_state_t *state, choices_t **submenu) {
     state->menu_state = MENU_MAIN;
     state->current_content_id = NULL;
     state->submenu_selected = 0;
-    if (*submenu != NULL) {
-        choices_free(*submenu);
-        *submenu = NULL;
-    }
+    // Don't free the submenu here
     clear();
     refresh();
 }
@@ -406,7 +404,10 @@ int main(int argc, char **argv)
                 case '\r':
                 case '\n':
                 case ' ':
-                    reset_menu_state(&state, &submenu);  // Reset before creating new submenu
+                    if (submenu != NULL) {
+                        choices_free(submenu);  // Free previous submenu if it exists
+                        submenu = NULL;
+                    }
                     submenu = get_submenu_choices(iso_info, content_id_to_criteria[state.main_selected].content_id);
                     if (submenu != NULL && submenu->len > 0) {
                         state.menu_state = MENU_SUBMENU;
