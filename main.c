@@ -300,12 +300,15 @@ void exit_cb(void)
     endwin();
 }
 
-// In the reset_menu_state function, modify to only reset menu state without clearing submenu
+// First, modify reset_menu_state to properly handle the submenu
 void reset_menu_state(menu_state_t *state, choices_t **submenu) {
     state->menu_state = MENU_MAIN;
     state->current_content_id = NULL;
     state->submenu_selected = 0;
-    // Don't free the submenu here
+    if (*submenu != NULL) {
+        choices_free(*submenu);
+        *submenu = NULL;
+    }
     clear();
     refresh();
 }
@@ -380,10 +383,6 @@ int main(int argc, char **argv)
         orange_banner("Choose an Ubuntu version to install");
 
         if(state.menu_state == MENU_MAIN) {
-            if (submenu != NULL) {
-                choices_free(submenu);
-                submenu = NULL;
-            }
             show_main_menu(iso_info, state.main_selected);
             refresh();
             
@@ -404,11 +403,15 @@ int main(int argc, char **argv)
                 case '\r':
                 case '\n':
                 case ' ':
+                    if (submenu != NULL) {
+                        choices_free(submenu);
+                        submenu = NULL;
+                    }
                     submenu = get_submenu_choices(iso_info, content_id_to_criteria[state.main_selected].content_id);
                     if (submenu != NULL && submenu->len > 0) {
                         state.menu_state = MENU_SUBMENU;
                         state.current_content_id = content_id_to_criteria[state.main_selected].content_id;
-                        state.submenu_selected = 0;  // Reset submenu selection when entering
+                        state.submenu_selected = 0;
                     }
                     break;
             }
