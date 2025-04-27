@@ -305,10 +305,12 @@ void reset_menu_state(menu_state_t *state, choices_t **submenu) {
     state->menu_state = MENU_MAIN;
     state->current_content_id = NULL;
     state->submenu_selected = 0;
+
     if (*submenu != NULL) {
         choices_free(*submenu);
         *submenu = NULL;
     }
+
     clear();
     refresh();
 }
@@ -387,8 +389,11 @@ int main(int argc, char **argv)
             refresh();
             
             ch = getch();
-            if(ch == KEY_ESC) {
-                state.continuing = false;
+            
+            if (ch == KEY_ESC) {
+                reset_menu_state(&state, &submenu);  // Reset the submenu and state
+                show_main_menu(iso_info, state.main_selected);
+                refresh();
                 continue;
             }
 
