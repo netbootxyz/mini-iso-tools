@@ -315,6 +315,49 @@ void reset_menu_state(menu_state_t *state, choices_t **submenu) {
     refresh();
 }
 
+void reset_submenu_state(menu_state_t *state, choices_t **submenu) {
+    if (*submenu != NULL) {
+        choices_free(*submenu);
+        *submenu = NULL;
+    }
+    state->menu_state = MENU_MAIN;
+    state->current_content_id = NULL;
+    state->submenu_selected = 0;
+}
+
+int handle_main_menu(menu_state_t *state, choices_t *iso_info, choices_t **submenu, int ch) {
+    switch(ch) {
+        case KEY_DOWN:
+        case 'j':
+            if(state->main_selected < content_id_count() - 1) 
+                state->main_selected++;
+            return 1;
+        case KEY_UP:
+        case 'k':
+            if(state->main_selected > 0) 
+                state->main_selected--;
+            return 1;
+        case KEY_ENTER:
+        case KEY_RIGHT:
+        case '\r':
+        case '\n':
+        case ' ':
+            // Always reset and recreate submenu
+            reset_submenu_state(state, submenu);
+            *submenu = get_submenu_choices(iso_info, content_id_to_criteria[state->main_selected].content_id);
+            
+            if (*submenu && (*submenu)->len > 0) {
+                state->menu_state = MENU_SUBMENU;
+                state->current_content_id = content_id_to_criteria[state->main_selected].content_id;
+                state->submenu_selected = 0;
+                (*submenu)->cur = 0;
+                return 1;
+            }
+            break;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     args_t *args = args_create(argc, argv);
@@ -377,7 +420,6 @@ int main(int argc, char **argv)
         .submenu_selected = 0
     };
     
-    int ch = 0;
     choices_t* submenu = NULL;
 
     while(state.continuing) {
@@ -386,53 +428,24 @@ int main(int argc, char **argv)
 
         if(state.menu_state == MENU_MAIN) {
             show_main_menu(iso_info, state.main_selected);
-            refresh();
-            
-            ch = getch();
-            
-            if (ch == KEY_ESC) {
-                reset_menu_state(&state, &submenu);  // Reset the submenu and state
-                show_main_menu(iso_info, state.main_selected);
-                refresh();
-                continue;
-            }
-
-            switch(ch) {
-                case KEY_DOWN:
-                    if(state.main_selected < content_id_count() - 1) state.main_selected++;
-                    break;
-                case KEY_UP:
-                    if(state.main_selected > 0) state.main_selected--;
-                    break;
-                case KEY_ENTER:
-                case '\r':
-                case '\n':
-                case ' ':
-                    if (submenu != NULL) {
-                        choices_free(submenu);
-                        submenu = NULL;
-                    }
-                    submenu = get_submenu_choices(iso_info, content_id_to_criteria[state.main_selected].content_id);
-                    if (submenu != NULL && submenu->len > 0) {
-                        state.menu_state = MENU_SUBMENU;
-                        state.current_content_id = content_id_to_criteria[state.main_selected].content_id;
-                        state.submenu_selected = 0;
-                    }
-                    break;
-            }
         } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
-            submenu->cur = state.submenu_selected;
             add_chooser(submenu, state.submenu_selected);
-            refresh();
-            
-            ch = getch();
-            if(ch == KEY_ESC) {
-                reset_menu_state(&state, &submenu);
-                show_main_menu(iso_info, state.main_selected);
-                refresh();
-                continue;
-            }
+        }
 
+        int ch = getch();
+
+        if(ch == KEY_ESC || ch == 'q' || ch == 'Q') {
+            if(state.menu_state == MENU_SUBMENU) {
+                reset_submenu_state(&state, &submenu);
+            } else {
+                state.continuing = false;
+            }
+            continue;
+        }
+
+        if(state.menu_state == MENU_MAIN) {
+            handle_main_menu(&state, iso_info, &submenu, ch);
+        } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
             switch(ch) {
                 case KEY_DOWN:
                     if(state.submenu_selected < submenu->len - 1) {
@@ -455,6 +468,7 @@ int main(int argc, char **argv)
                     break;
             }
         }
+        refresh();
     }
 
     if (submenu != NULL) {
