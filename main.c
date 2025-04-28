@@ -267,7 +267,7 @@ void choice_handle_event(args_t *args, choices_t *choices, choice_event evt)
             if(choices->cur > 0) {
                 choices->cur--;
                 clear();
-                orange_banner("Choose an Ubuntu version to install");
+                orange_banner("netboot.xyz - Choose an Ubuntu version to install");
                 add_chooser(choices, choices->cur);
                 refresh();
             }
@@ -282,7 +282,7 @@ void choice_handle_event(args_t *args, choices_t *choices, choice_event evt)
             if(choices->cur < choices->len - 1) {
                 choices->cur++;
                 clear();
-                orange_banner("Choose an Ubuntu version to install");
+                orange_banner("netboot.xyz - Choose an Ubuntu version to install");
                 add_chooser(choices, choices->cur);
                 refresh();
             }
@@ -358,6 +358,18 @@ int handle_main_menu(menu_state_t *state, choices_t *iso_info, choices_t **subme
     return 0;
 }
 
+void show_debug_status(menu_state_t *state, choices_t *submenu) {
+    int y = LINES - 1;
+    mvprintw(y, 0, "State: %s | Main: %d | Sub: %d | ContentID: %s | Submenu: %s (len: %d)", 
+        state->menu_state == MENU_MAIN ? "MAIN" : "SUBMENU",
+        state->main_selected,
+        state->submenu_selected,
+        state->current_content_id ? state->current_content_id : "NULL",
+        submenu ? "EXISTS" : "NULL",
+        submenu ? submenu->len : 0
+    );
+}
+
 int main(int argc, char **argv)
 {
     args_t *args = args_create(argc, argv);
@@ -431,6 +443,8 @@ int main(int argc, char **argv)
         } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
             add_chooser(submenu, state.submenu_selected);
         }
+
+        show_debug_status(&state, submenu);
 
         int ch = getch();
 
