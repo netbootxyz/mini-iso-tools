@@ -321,8 +321,21 @@ void reset_submenu_state(menu_state_t *state, choices_t **submenu) {
     refresh();
 }
 
+#define DEBUG_HISTORY_SIZE 4
+char debug_history[DEBUG_HISTORY_SIZE][256] = {{0}};
+int debug_history_index = 0;
+
+void add_debug_message(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(debug_history[debug_history_index], 256, fmt, args);
+    va_end(args);
+    debug_history_index = (debug_history_index + 1) % DEBUG_HISTORY_SIZE;
+    syslog(LOG_DEBUG, "%s", debug_history[(DEBUG_HISTORY_SIZE + debug_history_index - 1) % DEBUG_HISTORY_SIZE]);
+}
+
 void show_debug_status(menu_state_t *state, choices_t *submenu) {
-    int y = LINES - 4;  // Show 4 lines of debug info
+    int y = LINES - 8;  // Show more debug lines
     mvprintw(y, 0, "Menu: %s | Main: %d/%d | Sub: %d/%d | ID: %s", 
         state->menu_state == MENU_MAIN ? "MAIN" : "SUBMENU",
         state->main_selected,
@@ -349,6 +362,15 @@ void show_debug_status(menu_state_t *state, choices_t *submenu) {
         state->last_input,
         state->menu_state == MENU_SUBMENU && !submenu ? "INVALID STATE" : "OK"
     );
+
+    // Show debug history
+    mvprintw(y + 4, 0, "Debug History:");
+    for (int i = 0; i < DEBUG_HISTORY_SIZE; i++) {
+        int idx = (DEBUG_HISTORY_SIZE + debug_history_index - i - 1) % DEBUG_HISTORY_SIZE;
+        if (debug_history[idx][0] != '\0') {
+            mvprintw(y + 5 + i, 2, "%s", debug_history[idx]);
+        }
+    }
 }
 
 int main(int argc, char **argv)
@@ -476,11 +498,16 @@ int main(int argc, char **argv)
             case ' ':
                 if(state.menu_state == MENU_MAIN) {
                     const char* selected_content_id = content_id_to_criteria[state.main_selected].content_id;
-                    syslog(LOG_DEBUG, "Creating submenu for content_id: %s", selected_content_id);
+                    add_debug_message("Enter pressed in main menu - creating submenu for %s", selected_content_id);
                     
                     choices_t* new_submenu = get_submenu_choices(iso_info, selected_content_id);
+                    add_debug_message("get_submenu_choices returned: ptr=%p, len=%d", 
+                           (void*)new_submenu, new_submenu ? new_submenu->len : -1);
+                    
                     if (new_submenu && new_submenu->len > 0) {
+                        add_debug_message("Valid submenu created with %d items", new_submenu->len);
                         if (submenu != NULL) {
+                            add_debug_message("Cleaning up old submenu: %p", (void*)submenu);
                             choices_free(submenu);
                         }
                         submenu = new_submenu;
@@ -488,12 +515,11 @@ int main(int argc, char **argv)
                         state.current_content_id = selected_content_id;
                         state.submenu_selected = 0;
                         submenu->cur = 0;
-                        syslog(LOG_DEBUG, "Created submenu with %d items", submenu->len);
                     } else {
+                        add_debug_message("Submenu creation failed or empty");
                         if (new_submenu) {
                             choices_free(new_submenu);
                         }
-                        syslog(LOG_DEBUG, "Failed to create submenu or empty submenu");
                     }
                 } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
                     choice_handle_event(args, submenu, SELECT);
