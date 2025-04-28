@@ -63,7 +63,6 @@ typedef struct {
     bool continuing;
     int main_selected;
     int submenu_selected;
-    int last_input;  // Add this field
 } menu_state_t;
 
 int ubuntu_orange = COLOR_RED;
@@ -211,68 +210,13 @@ void show_main_menu(choices_t *choices, int selected) {
     }
 }
 
-#define DEBUG_HISTORY_SIZE 4
-char debug_history[DEBUG_HISTORY_SIZE][256] = {{0}};
-int debug_history_index = 0;
-
-void add_debug_message(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(debug_history[debug_history_index], 256, fmt, args);
-    va_end(args);
-    debug_history_index = (debug_history_index + 1) % DEBUG_HISTORY_SIZE;
-    syslog(LOG_DEBUG, "%s", debug_history[(DEBUG_HISTORY_SIZE + debug_history_index - 1) % DEBUG_HISTORY_SIZE]);
-}
-
-void show_debug_status(menu_state_t *state, choices_t *submenu) {
-    int y = LINES - 8;  // Show more debug lines
-    mvprintw(y, 0, "Menu: %s | Main: %d/%d | Sub: %d/%d | ID: %s", 
-        state->menu_state == MENU_MAIN ? "MAIN" : "SUBMENU",
-        state->main_selected,
-        content_id_count() - 1,
-        state->submenu_selected,
-        submenu ? submenu->len - 1 : 0,
-        state->current_content_id ? state->current_content_id : "NULL"
-    );
-    
-    mvprintw(y + 1, 0, "Submenu: %s (len: %d) | Ptr: %p", 
-        submenu ? "EXISTS" : "NULL",
-        submenu ? submenu->len : 0,
-        (void*)submenu
-    );
-
-    const char* content_id = state->main_selected < content_id_count() ? 
-        content_id_to_criteria[state->main_selected].content_id : "INVALID";
-    mvprintw(y + 2, 0, "Selected ContentID: %s | Valid: %s", 
-        content_id,
-        submenu && state->current_content_id && strcmp(state->current_content_id, content_id) == 0 ? "YES" : "NO"
-    );
-
-    mvprintw(y + 3, 0, "Last Input: 0x%x | Navigation: %s", 
-        state->last_input,
-        state->menu_state == MENU_SUBMENU && !submenu ? "INVALID STATE" : "OK"
-    );
-
-    // Show debug history
-    mvprintw(y + 4, 0, "Debug History:");
-    for (int i = 0; i < DEBUG_HISTORY_SIZE; i++) {
-        int idx = (DEBUG_HISTORY_SIZE + debug_history_index - i - 1) % DEBUG_HISTORY_SIZE;
-        if (debug_history[idx][0] != '\0') {
-            mvprintw(y + 5 + i, 2, "%s", debug_history[idx]);
-        }
-    }
-}
-
 choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
-    add_debug_message("Creating submenu for content_id: %s", content_id);
     if (!all_choices || !content_id) {
-        add_debug_message("Invalid input parameters");
         return NULL;
     }
 
     choices_t* filtered = choices_create(50);
     if (!filtered) {
-        add_debug_message("Failed to create filtered choices");
         return NULL;
     }
     
@@ -283,11 +227,8 @@ choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
         }
         
         if(strcmp(all_choices->values[i]->content_id, content_id) == 0) {
-            add_debug_message("Found match: label=%s", all_choices->values[i]->label);
-            
             iso_data_t* copy = malloc(sizeof(iso_data_t));
             if (!copy) {
-                add_debug_message("Memory allocation failed for iso_data");
                 choices_free(filtered);
                 return NULL;
             }
@@ -300,7 +241,6 @@ choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
             copy->size = all_choices->values[i]->size;
             
             if (!copy->label || !copy->url || !copy->content_id || !copy->sha256sum) {
-                add_debug_message("String duplication failed");
                 free(copy->label);
                 free(copy->url);
                 free(copy->content_id);
@@ -311,7 +251,6 @@ choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
             }
             
             if (!choices_append(filtered, copy)) {
-                add_debug_message("Failed to append choice to filtered list");
                 free(copy->label);
                 free(copy->url);
                 free(copy->content_id);
@@ -324,15 +263,11 @@ choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
         }
     }
     
-    add_debug_message("Found %d matches for content_id %s", matches, content_id);
-    
     if (matches == 0) {
-        add_debug_message("No matches found, freeing filtered choices");
         choices_free(filtered);
         return NULL;
     }
     
-    add_debug_message("Successfully created submenu with %d items", filtered->len);
     return filtered;
 }
 
@@ -380,8 +315,6 @@ void choice_handle_event(args_t *args, choices_t *choices, choice_event evt)
         case SELECT:
             iso_data_t *cur = choices->values[choices->cur];
             write_output(args->outfile, cur);
-            syslog(LOG_DEBUG, "selected:%s %s %" PRId64,
-                   cur->label, cur->url, cur->size);
             break;
         case INCREASE:
             if(choices->cur < choices->len - 1) {
@@ -406,7 +339,6 @@ void exit_cb(void)
 }
 
 void reset_submenu_state(menu_state_t *state, choices_t **submenu) {
-    syslog(LOG_DEBUG, "Resetting submenu state. Current ptr: %p", (void*)*submenu);
     if (*submenu != NULL) {
         choices_free(*submenu);
         *submenu = NULL;
@@ -484,7 +416,7 @@ int main(int argc, char **argv)
 
     while(state.continuing) {
         clear();
-        orange_banner("Choose an Ubuntu version to install");
+        orange_banner("netboot.xyz - Choose an Ubuntu version to install");
 
         if(state.menu_state == MENU_MAIN) {
             show_main_menu(iso_info, state.main_selected);
@@ -492,12 +424,7 @@ int main(int argc, char **argv)
             add_chooser(submenu, state.submenu_selected);
         }
 
-        show_debug_status(&state, submenu);
-
         int ch = getch();
-        state.last_input = ch;
-        syslog(LOG_DEBUG, "Processing input: 0x%x in state: %s", ch, 
-               state.menu_state == MENU_MAIN ? "MAIN" : "SUBMENU");
 
         switch(ch) {
             case 27:  // ESC key
@@ -543,16 +470,11 @@ int main(int argc, char **argv)
             case ' ':
                 if(state.menu_state == MENU_MAIN) {
                     const char* selected_content_id = content_id_to_criteria[state.main_selected].content_id;
-                    add_debug_message("Enter pressed in main menu - creating submenu for %s", selected_content_id);
                     
                     choices_t* new_submenu = get_submenu_choices(iso_info, selected_content_id);
-                    add_debug_message("get_submenu_choices returned: ptr=%p, len=%d", 
-                           (void*)new_submenu, new_submenu ? new_submenu->len : -1);
                     
                     if (new_submenu && new_submenu->len > 0) {
-                        add_debug_message("Valid submenu created with %d items", new_submenu->len);
                         if (submenu != NULL) {
-                            add_debug_message("Cleaning up old submenu: %p", (void*)submenu);
                             choices_free(submenu);
                         }
                         submenu = new_submenu;
@@ -561,7 +483,6 @@ int main(int argc, char **argv)
                         state.submenu_selected = 0;
                         submenu->cur = 0;
                     } else {
-                        add_debug_message("Submenu creation failed or empty");
                         if (new_submenu) {
                             choices_free(new_submenu);
                         }
