@@ -62,6 +62,7 @@ typedef struct {
     bool continuing;
     int main_selected;
     int submenu_selected;
+    int last_input;  // Add this field
 } menu_state_t;
 
 int ubuntu_orange = COLOR_RED;
@@ -210,13 +211,20 @@ void show_main_menu(choices_t *choices, int selected) {
 }
 
 choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
-    choices_t* filtered = choices_create(50); // Allow for more choices
+    syslog(LOG_DEBUG, "get_submenu_choices: creating for content_id: %s", content_id);
+    choices_t* filtered = choices_create(50);
+    
+    int matches = 0;
     for(int i = 0; i < all_choices->len; i++) {
+        syslog(LOG_DEBUG, "Checking choice %d: content_id=%s", i, 
+               all_choices->values[i]->content_id ? all_choices->values[i]->content_id : "NULL");
         if(all_choices->values[i]->content_id && 
            strcmp(all_choices->values[i]->content_id, content_id) == 0) {
             choices_append(filtered, all_choices->values[i]);
+            matches++;
         }
     }
+    syslog(LOG_DEBUG, "get_submenu_choices: found %d matches for %s", matches, content_id);
     
     // Sort filtered choices by label (which contains version info)
     for(int i = 0; i < filtered->len; i++) {
@@ -316,6 +324,7 @@ void reset_menu_state(menu_state_t *state, choices_t **submenu) {
 }
 
 void reset_submenu_state(menu_state_t *state, choices_t **submenu) {
+    syslog(LOG_DEBUG, "Resetting submenu state. Current ptr: %p", (void*)*submenu);
     if (*submenu != NULL) {
         choices_free(*submenu);
         *submenu = NULL;
@@ -323,9 +332,13 @@ void reset_submenu_state(menu_state_t *state, choices_t **submenu) {
     state->menu_state = MENU_MAIN;
     state->current_content_id = NULL;
     state->submenu_selected = 0;
+    clear();
+    refresh();
 }
 
 int handle_main_menu(menu_state_t *state, choices_t *iso_info, choices_t **submenu, int ch) {
+    syslog(LOG_DEBUG, "Main menu handler - ch: 0x%x, state: %d", ch, state->menu_state);
+
     switch(ch) {
         case KEY_DOWN:
         case 'j':
@@ -342,16 +355,25 @@ int handle_main_menu(menu_state_t *state, choices_t *iso_info, choices_t **subme
         case '\r':
         case '\n':
         case ' ':
-            // Always reset and recreate submenu
-            reset_submenu_state(state, submenu);
-            *submenu = get_submenu_choices(iso_info, content_id_to_criteria[state->main_selected].content_id);
+            const char* selected_content_id = content_id_to_criteria[state->main_selected].content_id;
+            syslog(LOG_DEBUG, "Creating submenu for content_id: %s", selected_content_id);
             
+            // Always recreate submenu on enter
+            if (*submenu != NULL) {
+                choices_free(*submenu);
+                *submenu = NULL;
+            }
+            
+            *submenu = get_submenu_choices(iso_info, selected_content_id);
             if (*submenu && (*submenu)->len > 0) {
                 state->menu_state = MENU_SUBMENU;
-                state->current_content_id = content_id_to_criteria[state->main_selected].content_id;
+                state->current_content_id = selected_content_id;
                 state->submenu_selected = 0;
                 (*submenu)->cur = 0;
+                syslog(LOG_DEBUG, "Created submenu with %d items", (*submenu)->len);
                 return 1;
+            } else {
+                syslog(LOG_DEBUG, "Failed to create submenu or empty submenu");
             }
             break;
     }
@@ -359,14 +381,32 @@ int handle_main_menu(menu_state_t *state, choices_t *iso_info, choices_t **subme
 }
 
 void show_debug_status(menu_state_t *state, choices_t *submenu) {
-    int y = LINES - 1;
-    mvprintw(y, 0, "State: %s | Main: %d | Sub: %d | ContentID: %s | Submenu: %s (len: %d)", 
+    int y = LINES - 4;  // Show 4 lines of debug info
+    mvprintw(y, 0, "Menu: %s | Main: %d/%d | Sub: %d/%d | ID: %s", 
         state->menu_state == MENU_MAIN ? "MAIN" : "SUBMENU",
         state->main_selected,
+        content_id_count() - 1,
         state->submenu_selected,
-        state->current_content_id ? state->current_content_id : "NULL",
+        submenu ? submenu->len - 1 : 0,
+        state->current_content_id ? state->current_content_id : "NULL"
+    );
+    
+    mvprintw(y + 1, 0, "Submenu: %s (len: %d) | Ptr: %p", 
         submenu ? "EXISTS" : "NULL",
-        submenu ? submenu->len : 0
+        submenu ? submenu->len : 0,
+        (void*)submenu
+    );
+
+    const char* content_id = state->main_selected < content_id_count() ? 
+        content_id_to_criteria[state->main_selected].content_id : "INVALID";
+    mvprintw(y + 2, 0, "Selected ContentID: %s | Valid: %s", 
+        content_id,
+        submenu && state->current_content_id && strcmp(state->current_content_id, content_id) == 0 ? "YES" : "NO"
+    );
+
+    mvprintw(y + 3, 0, "Last Input: 0x%x | Navigation: %s", 
+        state->last_input,
+        state->menu_state == MENU_SUBMENU && !submenu ? "INVALID STATE" : "OK"
     );
 }
 
@@ -447,40 +487,80 @@ int main(int argc, char **argv)
         show_debug_status(&state, submenu);
 
         int ch = getch();
+        state.last_input = ch;
+        syslog(LOG_DEBUG, "Processing input: 0x%x in state: %s", ch, 
+               state.menu_state == MENU_MAIN ? "MAIN" : "SUBMENU");
 
-        if(ch == KEY_ESC || ch == 'q' || ch == 'Q') {
-            if(state.menu_state == MENU_SUBMENU) {
-                reset_submenu_state(&state, &submenu);
-            } else {
-                state.continuing = false;
-            }
-            continue;
-        }
+        // Handle all input processing in one place
+        switch(ch) {
+            case KEY_ESC:
+            case 'q':
+            case 'Q':
+            case 0x1b:
+                if(state.menu_state == MENU_SUBMENU) {
+                    reset_submenu_state(&state, &submenu);
+                } else {
+                    state.continuing = false;
+                }
+                break;
 
-        if(state.menu_state == MENU_MAIN) {
-            handle_main_menu(&state, iso_info, &submenu, ch);
-        } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
-            switch(ch) {
-                case KEY_DOWN:
+            case KEY_DOWN:
+            case 'j':
+                if(state.menu_state == MENU_MAIN) {
+                    if(state.main_selected < content_id_count() - 1) 
+                        state.main_selected++;
+                } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
                     if(state.submenu_selected < submenu->len - 1) {
                         state.submenu_selected++;
                         submenu->cur = state.submenu_selected;
                     }
-                    break;
-                case KEY_UP:
+                }
+                break;
+
+            case KEY_UP:
+            case 'k':
+                if(state.menu_state == MENU_MAIN) {
+                    if(state.main_selected > 0) 
+                        state.main_selected--;
+                } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
                     if(state.submenu_selected > 0) {
                         state.submenu_selected--;
                         submenu->cur = state.submenu_selected;
                     }
-                    break;
-                case KEY_ENTER:
-                case '\r':
-                case '\n':
-                case ' ':
+                }
+                break;
+
+            case KEY_ENTER:
+            case KEY_RIGHT:
+            case '\r':
+            case '\n':
+            case ' ':
+                if(state.menu_state == MENU_MAIN) {
+                    const char* selected_content_id = content_id_to_criteria[state.main_selected].content_id;
+                    syslog(LOG_DEBUG, "Creating submenu for content_id: %s", selected_content_id);
+                    
+                    choices_t* new_submenu = get_submenu_choices(iso_info, selected_content_id);
+                    if (new_submenu && new_submenu->len > 0) {
+                        if (submenu != NULL) {
+                            choices_free(submenu);
+                        }
+                        submenu = new_submenu;
+                        state.menu_state = MENU_SUBMENU;
+                        state.current_content_id = selected_content_id;
+                        state.submenu_selected = 0;
+                        submenu->cur = 0;
+                        syslog(LOG_DEBUG, "Created submenu with %d items", submenu->len);
+                    } else {
+                        if (new_submenu) {
+                            choices_free(new_submenu);
+                        }
+                        syslog(LOG_DEBUG, "Failed to create submenu or empty submenu");
+                    }
+                } else if(state.menu_state == MENU_SUBMENU && submenu != NULL) {
                     choice_handle_event(args, submenu, SELECT);
                     state.continuing = false;
-                    break;
-            }
+                }
+                break;
         }
         refresh();
     }
