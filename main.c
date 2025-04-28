@@ -211,22 +211,38 @@ void show_main_menu(choices_t *choices, int selected) {
 }
 
 choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
-    syslog(LOG_DEBUG, "get_submenu_choices: creating for content_id: %s", content_id);
+    add_debug_message("Creating submenu for content_id: %s", content_id);
     choices_t* filtered = choices_create(50);
+    if (!filtered) {
+        add_debug_message("Failed to create filtered choices");
+        return NULL;
+    }
     
     int matches = 0;
     for(int i = 0; i < all_choices->len; i++) {
-        syslog(LOG_DEBUG, "Checking choice %d: content_id=%s", i, 
-               all_choices->values[i]->content_id ? all_choices->values[i]->content_id : "NULL");
-        if(all_choices->values[i]->content_id && 
+        if(all_choices->values[i] && all_choices->values[i]->content_id && 
            strcmp(all_choices->values[i]->content_id, content_id) == 0) {
-            choices_append(filtered, all_choices->values[i]);
+            iso_data_t* copy = malloc(sizeof(iso_data_t));
+            if (!copy) {
+                add_debug_message("Memory allocation failed for iso_data");
+                choices_free(filtered);
+                return NULL;
+            }
+            *copy = *all_choices->values[i];  // Copy the data
+            choices_append(filtered, copy);
             matches++;
         }
     }
-    syslog(LOG_DEBUG, "get_submenu_choices: found %d matches for %s", matches, content_id);
     
-    // Sort filtered choices by label (which contains version info)
+    add_debug_message("Found %d matches for content_id %s", matches, content_id);
+    
+    if (matches == 0) {
+        add_debug_message("No matches found, freeing filtered choices");
+        choices_free(filtered);
+        return NULL;
+    }
+    
+    // Sort filtered choices by label
     for(int i = 0; i < filtered->len; i++) {
         for(int j = i + 1; j < filtered->len; j++) {
             if(strcmp(filtered->values[i]->label, filtered->values[j]->label) < 0) {
@@ -236,6 +252,8 @@ choices_t* get_submenu_choices(choices_t* all_choices, const char* content_id) {
             }
         }
     }
+    
+    add_debug_message("Successfully created submenu with %d items", filtered->len);
     return filtered;
 }
 
