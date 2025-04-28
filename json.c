@@ -30,33 +30,26 @@
 #define MINIMUM_UBUNTU_VERSION "22.04.2"
 
  criteria_t content_id_to_criteria[] = {
+    {
+        .content_id = "org.ubuntubudgie:ubuntu-budgie",
+        .os = "ubuntu-budgie",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/ubuntu-budgie/releases",
+        .descriptor = "Budgie Desktop",
+     }, 
      {
-         .content_id = "com.ubuntu.releases:ubuntu",
-         .os = "ubuntu",
-         .image_type = "desktop",
-         .urlbase = "https://releases.ubuntu.com",
-         .descriptor = "Ubuntu Desktop",
+        .content_id = "org.edubuntu:edubuntu",
+        .os = "edubuntu",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/edubuntu/releases",
+        .descriptor = "Edubuntu",
      },
      {
-         .content_id = "com.ubuntu.releases:ubuntu-server",
-         .os = "ubuntu-server",
-         .image_type = "live-server",
-         .urlbase = "https://releases.ubuntu.com",
-         .descriptor = "Ubuntu Server",
-     },
-     {
-         .content_id = "org.xubuntu:xubuntu",
-         .os = "xubuntu",
-         .image_type = "desktop",
-         .urlbase = "https://cdimage.ubuntu.com/xubuntu/releases",
-         .descriptor = "Xubuntu Desktop",
-     },
-     {
-         .content_id = "org.ubuntubudgie:ubuntu-budgie",
-         .os = "ubuntu-budgie",
-         .image_type = "desktop",
-         .urlbase = "https://cdimage.ubuntu.com/ubuntu-budgie/releases",
-         .descriptor = "Budgie Desktop",
+        .content_id = "org.kubuntu:kubuntu",
+        .os = "kubuntu",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/kubuntu/releases",
+        .descriptor = "Kubuntu Desktop",
      },
      {
          .content_id = "me.lubuntu:lubuntu",
@@ -66,11 +59,11 @@
          .descriptor = "Lubuntu Desktop",
      },
      {
-         .content_id = "org.kubuntu:kubuntu",
-         .os = "kubuntu",
-         .image_type = "desktop",
-         .urlbase = "https://cdimage.ubuntu.com/kubuntu/releases",
-         .descriptor = "Kubuntu Desktop",
+        .content_id = "com.ubuntu.releases:ubuntu",
+        .os = "ubuntu",
+        .image_type = "desktop",
+        .urlbase = "https://releases.ubuntu.com",
+        .descriptor = "Ubuntu Desktop",
      },
      {
         .content_id = "org.ubuntu-mate:ubuntu-mate",
@@ -80,11 +73,18 @@
         .descriptor = "Ubuntu MATE",
     },
     {
-        .content_id = "org.ubuntu-mate:ubuntu-mate",
-        .os = "edubuntu",
+        .content_id = "com.ubuntu.releases:ubuntu-server",
+        .os = "ubuntu-server",
+        .image_type = "live-server",
+        .urlbase = "https://releases.ubuntu.com",
+        .descriptor = "Ubuntu Server",
+    },
+    {
+        .content_id = "org.xubuntu:xubuntu",
+        .os = "xubuntu",
         .image_type = "desktop",
-        .urlbase = "https://cdimage.ubuntu.com/edubuntu/releases",
-        .descriptor = "Edubuntu",
+        .urlbase = "https://cdimage.ubuntu.com/xubuntu/releases",
+        .descriptor = "Xubuntu Desktop",
     },
     {} /* must be last */
  };
