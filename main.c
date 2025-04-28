@@ -308,21 +308,6 @@ void exit_cb(void)
     endwin();
 }
 
-// First, modify reset_menu_state to properly handle the submenu
-void reset_menu_state(menu_state_t *state, choices_t **submenu) {
-    state->menu_state = MENU_MAIN;
-    state->current_content_id = NULL;
-    state->submenu_selected = 0;
-
-    if (*submenu != NULL) {
-        choices_free(*submenu);
-        *submenu = NULL;
-    }
-
-    clear();
-    refresh();
-}
-
 void reset_submenu_state(menu_state_t *state, choices_t **submenu) {
     syslog(LOG_DEBUG, "Resetting submenu state. Current ptr: %p", (void*)*submenu);
     if (*submenu != NULL) {
@@ -334,50 +319,6 @@ void reset_submenu_state(menu_state_t *state, choices_t **submenu) {
     state->submenu_selected = 0;
     clear();
     refresh();
-}
-
-int handle_main_menu(menu_state_t *state, choices_t *iso_info, choices_t **submenu, int ch) {
-    syslog(LOG_DEBUG, "Main menu handler - ch: 0x%x, state: %d", ch, state->menu_state);
-
-    switch(ch) {
-        case KEY_DOWN:
-        case 'j':
-            if(state->main_selected < content_id_count() - 1) 
-                state->main_selected++;
-            return 1;
-        case KEY_UP:
-        case 'k':
-            if(state->main_selected > 0) 
-                state->main_selected--;
-            return 1;
-        case KEY_ENTER:
-        case KEY_RIGHT:
-        case '\r':
-        case '\n':
-        case ' ':
-            const char* selected_content_id = content_id_to_criteria[state->main_selected].content_id;
-            syslog(LOG_DEBUG, "Creating submenu for content_id: %s", selected_content_id);
-            
-            // Always recreate submenu on enter
-            if (*submenu != NULL) {
-                choices_free(*submenu);
-                *submenu = NULL;
-            }
-            
-            *submenu = get_submenu_choices(iso_info, selected_content_id);
-            if (*submenu && (*submenu)->len > 0) {
-                state->menu_state = MENU_SUBMENU;
-                state->current_content_id = selected_content_id;
-                state->submenu_selected = 0;
-                (*submenu)->cur = 0;
-                syslog(LOG_DEBUG, "Created submenu with %d items", (*submenu)->len);
-                return 1;
-            } else {
-                syslog(LOG_DEBUG, "Failed to create submenu or empty submenu");
-            }
-            break;
-    }
-    return 0;
 }
 
 void show_debug_status(menu_state_t *state, choices_t *submenu) {
@@ -491,12 +432,10 @@ int main(int argc, char **argv)
         syslog(LOG_DEBUG, "Processing input: 0x%x in state: %s", ch, 
                state.menu_state == MENU_MAIN ? "MAIN" : "SUBMENU");
 
-        // Handle all input processing in one place
         switch(ch) {
-            case KEY_ESC:
+            case 27:  // ESC key
             case 'q':
             case 'Q':
-            case 0x1b:
                 if(state.menu_state == MENU_SUBMENU) {
                     reset_submenu_state(&state, &submenu);
                 } else {
