@@ -46,9 +46,15 @@ iso_chooser_step1() {
 
     configure_networking
 
-    modprobe isofs
-    wget https://cdimage.ubuntu.com/ubuntu-mini-iso/daily-live/current/plucky-mini-iso-amd64.iso -O /tmp/mini-iso.iso
-    mount -o ro /tmp/mini-iso.iso "${mountpoint}"
+    echo "Retrieving latest ubuntu-spins kernels for kexec..."
+    mkdir -p ${mountpoint}/casper/
+    wget https://github.com/netbootxyz/ubuntu-spins/releases/latest/download/vmlinuz -O ${mountpoint}/casper/vmlinuz
+    wget https://github.com/netbootxyz/ubuntu-spins/releases/latest/download/initrd -O ${mountpoint}/casper/initrd
+    
+    #modprobe isofs
+    
+    #wget https://cdimage.ubuntu.com/ubuntu-mini-iso/daily-live/current/plucky-mini-iso-amd64.iso -O /tmp/mini-iso.iso
+    #mount -o ro /tmp/mini-iso.iso "${mountpoint}"
 
     echo "Loading $MEDIA_LABEL ..."
 
