@@ -66,6 +66,10 @@ iso_chooser_step1() {
 
     cmdline="$cmdline iso-chooser-step2"
 
+    if [ -n "$DOWNLOAD_MODE" ]; then
+        cmdline="$cmdline download-mode=$DOWNLOAD_MODE"
+    fi
+    
     memmap_size="$(/usr/lib/mini-iso-tools/get_memmap_directive $MEDIA_SIZE)"
     if [ -z "$memmap_size" -o "$?" -ne "0" ] ; then
         echo "failed to determine size reservation for memmap, debug shell"
@@ -98,10 +102,11 @@ iso_chooser_step2() {
     echo "Downloading $URL using ${DOWNLOAD_MODE:-direct} method..."
     case "${DOWNLOAD_MODE:-direct}" in
         torrent)
-            TORRENT_URL="${URL%.*}.torrent"
+            TORRENT_URL="$(echo "$URL" | sed 's/\.iso/.iso.torrent/')"
             echo "Using torrent: $TORRENT_URL"
             wget "$TORRENT_URL" -O /tmp/ubuntu.torrent
-            transmission-cli -w /tmp -f -D /tmp/ubuntu.torrent
+            CTORRENT_ARGS="-E 0 -e 0"
+            ctorrent $CTORRENT_ARGS -s /tmp/ /tmp/ubuntu.torrent
             dd if=/tmp/*.iso of="$target" bs=1M
             rm -f /tmp/*.iso /tmp/ubuntu.torrent
             ;;
