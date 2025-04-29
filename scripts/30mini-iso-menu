@@ -105,8 +105,7 @@ iso_chooser_step2() {
             TORRENT_URL="$(echo "$URL" | sed 's/\.iso/.iso.torrent/')"
             echo "Using torrent: $TORRENT_URL"
             wget "$TORRENT_URL" -O /tmp/ubuntu.torrent
-            CTORRENT_ARGS="-E 0 -e 0"
-            ctorrent $CTORRENT_ARGS -s /tmp/ /tmp/ubuntu.torrent
+            transmission-cli --download-dir /tmp/ --no-downlimit --seedratio 0.0 /tmp/ubuntu.torrent
             dd if=/tmp/*.iso of="$target" bs=1M
             rm -f /tmp/*.iso /tmp/ubuntu.torrent
             ;;
