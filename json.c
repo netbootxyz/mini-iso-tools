@@ -80,6 +80,20 @@
         .descriptor = "Ubuntu Server",
     },
     {
+        .content_id = "org.ubuntucinnamon:ubuntu-cinnamon",
+        .os = "ubuntu-cinnamon",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/ubuntucinnamon/releases",
+        .descriptor = "Ubuntu Cinnamon",
+    },
+    {
+        .content_id = "org.ubuntustudio:ubuntu-studio",
+        .os = "ubuntu-studio",
+        .image_type = "desktop",
+        .urlbase = "https://cdimage.ubuntu.com/ubuntustudio/releases",
+        .descriptor = "Ubuntu Studio",
+    },
+    {
         .content_id = "org.xubuntu:xubuntu",
         .os = "xubuntu",
         .image_type = "desktop",
